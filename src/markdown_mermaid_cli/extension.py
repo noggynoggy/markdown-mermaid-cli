@@ -44,8 +44,9 @@ class MermaidProcessor(Preprocessor):
     ]
 
     def __init__(self, md, config):
-        format = config['default_format']
+        format = config.get('default_format', 'svg')
         self.format = format if format in VALID_FORMAT else 'svg'
+        self.scale = config.get('scale', '1')
         super().__init__(md)
 
     def run(self, lines: List[str]) -> List[str]:
@@ -106,14 +107,23 @@ class MermaidProcessor(Preprocessor):
                     if option in self.MERMAID_OPTIONS:
                         mermaid_options[option] = code_block_options[option].strip('"')
 
+                # Inject global scale if not overridden in code block
+                if 'scale' not in mermaid_options:
+                    mermaid_options['scale'] = self.scale
+
                 img_src = self._get_img_src(diagram_code, format, mermaid_options)
                 if img_src:
                     # Build the <img> tag with extracted options
-                    img_tag = f'<img src="{img_src}"'
+                    img_tag = f'<img class="mermaid-pdf-only" src="{img_src}"'
                     for key, value in img_tag_attributes.items():
                         img_tag += f' {key}={value}'
                     img_tag += ' />'
-                    html_string = img_tag
+                    
+                    # Also include the original code block for the web version
+                    # We wrap it so we can hide it in print
+                    # We use markdown="1" to ensure md_in_html processes the block inside
+                    web_code = "\n".join(lines)
+                    html_string = f'<div class="mermaid-wrapper"><div class="mermaid-web-only" markdown="1">\n\n{web_code}\n\n</div>{img_tag}</div>'
                 break
 
             else:
@@ -195,6 +205,10 @@ class MermaidExtension(Extension):
             'default_format': [
                 'svg',
                 'Set the default format to render the diagrams. - Default: svg',
+            ],
+            'scale': [
+                '1',
+                'Set the default scale factor for PNG output. - Default: 1',
             ]
         }
         super().__init__(**kwargs)
